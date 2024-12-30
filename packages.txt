@@ -1,0 +1,8 @@
+stow
+zoxide
+fzf
+neovim
+tmux
+yazi
+eza
+
