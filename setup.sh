@@ -31,12 +31,3 @@ while IFS= read -r package || [[ -n "$package" ]]; do
   fi
 done < "$PACKAGES_FILE"
 
-# Run stow
-echo "Running 'stow .' in the current directory..."
-if stow .; then
-  echo "'stow .' completed successfully."
-else
-  echo "Failed to run 'stow .'. Please check for errors."
-fi
-
-echo "Script completed."
