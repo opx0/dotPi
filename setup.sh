@@ -9,7 +9,7 @@ else
 fi
 
 # File containing package names
-PACKAGES_FILE="packages"
+PACKAGES_FILE="packages.txt"
 
 # Check if the packages file exists
 if [ ! -f "$PACKAGES_FILE" ]; then
