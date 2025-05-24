@@ -11,7 +11,6 @@ fi
 # File containing package names
 PACKAGES_FILE="packages.txt"
 
-# Check if the packages file exists
 if [ ! -f "$PACKAGES_FILE" ]; then
   echo "Error: $PACKAGES_FILE not found."
   exit 1

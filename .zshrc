@@ -1,12 +1,3 @@
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-# if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-#   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-# fi
-
-
-
 # Set the directory we want to store zinit and plugins
 ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
@@ -20,35 +11,21 @@ fi
 source "${ZINIT_HOME}/zinit.zsh"
 
 
-# Add in Powerlevel10k
-# zinit ice depth=1; zinit light romkatv/powerlevel10k #downlload from git
-
-# Add in zsh plugins > the big THR33 of termainal
+# Add in zsh plugins - the big THREE of terminal
 zinit light zsh-users/zsh-syntax-highlighting
 zinit light zsh-users/zsh-completions
 zinit light zsh-users/zsh-autosuggestions
-# fuzzy finder wit tab
+# fuzzy finder with tab
 zinit light Aloxaf/fzf-tab
 
 # Add in snippets
 zinit snippet OMZP::git
 zinit snippet OMZP::sudo
-zinit snippet OMZP::archlinux
-zinit snippet OMZP::aws
-zinit snippet OMZP::kubectl
-zinit snippet OMZP::kubectx
-zinit snippet OMZP::command-not-found
 
 # Load completions
 autoload -Uz compinit && compinit
 
 zinit cdreplay -q
-
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-# [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-
-# INSTANT_PROMPT will not announce itself that i'm enabled
-# typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 
 # Keybindings
 bindkey -e
@@ -81,7 +58,6 @@ alias ls='ls --color'
 alias v='nvim'
 alias cl='clear'
 alias la=tree
-alias cat=bat
 alias op="code ."
 
 # Dirs
@@ -108,19 +84,36 @@ alias gcoall='git checkout -- .'
 alias gr='git remote'
 alias gre='git reset'
 
-# Eza
-alias l="eza -l --icons --git -a"
-alias lt="eza --tree --level=2 --long --icons --git"
+# Eza (conditional)
+if command -v eza > /dev/null 2>&1; then
+    alias l="eza -l --icons --git -a"
+    alias lt="eza --tree --level=2 --long --icons --git"
+else
+    alias l="ls -la"
+    alias lt="tree -L 2"
+fi
 
 ## aother cool rustbased file manager inside terminal
-alias fs='yazi'
+if command -v yazi > /dev/null 2>&1; then
+    alias fs='yazi'
+fi
 
 ## tmux
 alias ta='tmux attach'
-# navigation
+
+# navigation functions
 cx() { cd "$@" && l; }
 fcd() { cd "$(find . -type d -not -path '*/.*' | fzf)" && l; }
-f() { echo "$(find . -type f -not -path '*/.*' | fzf)" | pbcopy }
+f() {
+    local file="$(find . -type f -not -path '*/.*' | fzf)"
+    if [[ -n "$file" ]]; then
+        if command -v xclip > /dev/null 2>&1; then
+            echo "$file" | xclip -selection clipboard
+        else
+            echo "$file"
+        fi
+    fi
+}
 fv() { nvim "$(find . -type f -not -path '*/.*' | fzf)" }
 
 # Shell integrations
@@ -129,3 +122,6 @@ eval "$(zoxide init --cmd d zsh)"
 
 export STARSHIP_CONFIG=~/.config/starship/starship.toml
 eval "$(starship init zsh)"
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+export TERM=xterm-256color

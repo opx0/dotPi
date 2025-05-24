@@ -5,4 +5,5 @@ neovim
 tmux
 yazi
 eza
-
+zsh
+tree
