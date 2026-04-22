@@ -1,5 +1,7 @@
-.git
-scripts
-README.md
-packages.txt
-setup.sh
+\.git
+\.claude
+README\.md
+LICENSE
+packages\.txt
+setup\.sh
+\.stow-local-ignore

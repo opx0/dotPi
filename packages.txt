@@ -1,9 +1,16 @@
+# apt packages installed by setup.sh
+# eza/yazi/zoxide/starship are handled separately (binary / apt-repo)
 stow
-zoxide
 fzf
 neovim
 tmux
-yazi
-eza
 zsh
 tree
+xclip
+curl
+wget
+git
+unzip
+gpg
+ca-certificates
+locales
