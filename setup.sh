@@ -91,10 +91,18 @@ preflight() {
     exit 1
   fi
 
-  # keep sudo alive for the rest of the run
-  log "Requesting sudo (cached for the session)..."
-  sudo -v
-  ( while true; do sudo -n true; sleep 50; kill -0 $$ 2>/dev/null || exit; done ) &
+  # sudo — prefer NOPASSWD; if a password is needed, warn clearly before prompting
+  if sudo -n true 2>/dev/null; then
+    ok "sudo (passwordless)"
+  else
+    log "sudo requires your password — you'll be asked ONCE, then cached for the run."
+    log "(if your user has no password, reset it via the Azure Portal or set NOPASSWD in /etc/sudoers.d/)"
+    if ! sudo -v; then
+      err "sudo authentication failed — cannot proceed without sudo"
+      exit 1
+    fi
+  fi
+  ( while true; do sudo -n true 2>/dev/null || exit; sleep 50; kill -0 $$ 2>/dev/null || exit; done ) &
   SUDO_KEEPALIVE=$!
   trap 'kill $SUDO_KEEPALIVE 2>/dev/null || true; cleanup' EXIT
 
