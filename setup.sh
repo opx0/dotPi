@@ -139,8 +139,16 @@ install_apt_packages() {
   done < "$DOTFILES_DIR/packages.txt"
 
   if [[ ${#pkgs[@]} -gt 0 ]]; then
-    log "Installing: ${pkgs[*]}"
-    run "sudo apt-get install -y -qq -o Dpkg::Options::=--force-confold ${pkgs[*]}"
+    # Use a space-joined string for display; IFS=$'\n\t' means "${pkgs[*]}" would newline-join.
+    local pkg_list
+    pkg_list="$(printf '%s ' "${pkgs[@]}")"
+    log "Installing: ${pkg_list% }"
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo -e "${DIM}    [dry] sudo apt-get install ${pkg_list% }${NC}"
+    else
+      # "${pkgs[@]}" expands each element as its own argv word regardless of IFS — correct way.
+      sudo apt-get install -y -qq -o Dpkg::Options::=--force-confold "${pkgs[@]}"
+    fi
     for p in "${pkgs[@]}"; do ok "$p"; done
   fi
 }
