@@ -127,8 +127,14 @@ else
 fi
 
 command -v yazi &>/dev/null && alias fs='yazi'
-command -v bat  &>/dev/null && alias cat='bat --paging=never'
 command -v btop &>/dev/null && alias top='btop'
+# Debian ships bat as `batcat`; alias it back, then point `cat` at it.
+if command -v bat &>/dev/null; then
+    alias cat='bat --paging=never'
+elif command -v batcat &>/dev/null; then
+    alias bat='batcat'
+    alias cat='batcat --paging=never'
+fi
 
 # ─── functions ────────────────────────────────────────────────────────────────
 cx() { cd "$@" && l; }
@@ -185,11 +191,19 @@ export FZF_DEFAULT_OPTS="\
 --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8"
 
 # use fd if available (faster + respects .gitignore)
+# Debian ships fd-find as `fdfind` to avoid a name clash; alias it back.
 if command -v fd &>/dev/null; then
-    export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
-    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-    export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
+    _FD=fd
+elif command -v fdfind &>/dev/null; then
+    _FD=fdfind
+    alias fd='fdfind'
 fi
+if [[ -n "${_FD:-}" ]]; then
+    export FZF_DEFAULT_COMMAND="$_FD --type f --hidden --follow --exclude .git"
+    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND="$_FD --type d --hidden --follow --exclude .git"
+fi
+unset _FD
 
 # ─── shell integrations ───────────────────────────────────────────────────────
 command -v fzf      &>/dev/null && source <(fzf --zsh) 2>/dev/null

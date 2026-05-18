@@ -7,7 +7,8 @@
 #
 # Safe to re-run. Supports: x86_64, aarch64, armv7l (eza only).
 
-set -euo pipefail
+set -Eeuo pipefail
+shopt -s inherit_errexit 2>/dev/null || true   # bash 4.4+: errexit into $( )
 IFS=$'\n\t'
 
 # ── bootstrap: clone repo if piped via curl|bash ──────────────────────────────
@@ -41,14 +42,36 @@ ARCH="$(uname -m)"
 LOGFILE="$HOME/.dotpi.log"
 BACKUP_DIR="$HOME/.dotpi-backup-$(date +%Y%m%d-%H%M%S)"
 DRY_RUN=0
+SKIP_SHELL=0
 export DEBIAN_FRONTEND=noninteractive
 export APT_LISTCHANGES_FRONTEND=none
+
+usage() {
+  cat <<EOF
+dotPi — one-shot bootstrap for Raspberry Pi / Debian / Ubuntu VPS
+
+Usage: $0 [--dry-run] [--skip-shell] [-h|--help]
+
+Flags:
+  --dry-run      Print every action without touching the system.
+  --skip-shell   Skip the chsh step (don't change the default shell).
+  -h, --help     Show this help.
+
+Env overrides honored when piped via curl|bash:
+  DOTPI_REPO     fork URL                (default: https://github.com/opx0/dotPi)
+  DOTPI_DIR      clone target            (default: \$HOME/dotPi)
+  DOTPI_BRANCH   branch/tag to check out (default: main)
+  GH_TOKEN       used for GitHub API calls to avoid rate-limiting
+EOF
+}
 
 # parse flags
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN=1 ;;
-    -h|--help) sed -n '2,8p' "$0"; echo; echo "Usage: $0 [--dry-run]"; exit 0 ;;
+    --dry-run)    DRY_RUN=1 ;;
+    --skip-shell) SKIP_SHELL=1 ;;
+    -h|--help)    usage; exit 0 ;;
+    *) echo "unknown flag: $arg" >&2; usage >&2; exit 2 ;;
   esac
 done
 
@@ -125,13 +148,23 @@ preflight() {
 }
 
 # ── apt packages ──────────────────────────────────────────────────────────────
+pkg_installed() {
+  # Robust: status field must start with "install ok installed".
+  local s
+  s=$(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null || true)
+  [[ "$s" == "installed" ]]
+}
+
 install_apt_packages() {
   log "Installing apt packages..."
   run "sudo apt-get update -y -qq"
   local pkgs=()
   while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+    # strip leading/trailing whitespace, then skip blank/comment lines
+    pkg="${pkg#"${pkg%%[![:space:]]*}"}"
+    pkg="${pkg%"${pkg##*[![:space:]]}"}"
     [[ -z "$pkg" || "$pkg" == \#* ]] && continue
-    if dpkg -l "$pkg" &>/dev/null 2>&1 && dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+    if pkg_installed "$pkg"; then
       ok "$pkg"
     else
       pkgs+=("$pkg")
@@ -185,6 +218,16 @@ install_eza() {
   ok "eza"
 }
 
+# Wrapper for GitHub API calls — honors GH_TOKEN to avoid the 60/hr anon limit.
+gh_api() {
+  local url="$1"
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$url"
+  else
+    curl -fsSL "$url"
+  fi
+}
+
 # ── yazi (via .deb from GitHub releases) ──────────────────────────────────────
 install_yazi() {
   log "Installing yazi..."
@@ -198,7 +241,7 @@ install_yazi() {
   esac
 
   local url
-  url=$(curl -fsSL "https://api.github.com/repos/sxyazi/yazi/releases/latest" \
+  url=$(gh_api "https://api.github.com/repos/sxyazi/yazi/releases/latest" \
         | grep "browser_download_url.*yazi-${target}\.deb\"" \
         | cut -d '"' -f4 | head -1)
 
@@ -218,7 +261,7 @@ install_yazi_zip() {
   local target="$1"
   local musl_target="${target/-gnu/-musl}"
   local url
-  url=$(curl -fsSL "https://api.github.com/repos/sxyazi/yazi/releases/latest" \
+  url=$(gh_api "https://api.github.com/repos/sxyazi/yazi/releases/latest" \
         | grep "browser_download_url.*yazi-${musl_target}\.zip\"" \
         | cut -d '"' -f4 | head -1)
   [[ -z "$url" ]] && { err "yazi: no zip release for $musl_target"; return; }
@@ -272,6 +315,10 @@ stow_dotfiles() {
 
 # ── default shell ─────────────────────────────────────────────────────────────
 set_zsh_default() {
+  if [[ $SKIP_SHELL -eq 1 ]]; then
+    log "Skipping shell change (--skip-shell)"
+    return
+  fi
   log "Setting zsh as default shell..."
   local zsh_path; zsh_path=$(command -v zsh)
   [[ -z "$zsh_path" ]] && { err "zsh not found in PATH"; return; }
@@ -294,6 +341,23 @@ set_zsh_default() {
   fi
 }
 
+# ── verify ────────────────────────────────────────────────────────────────────
+verify() {
+  log "Verifying installed tools..."
+  local missing=0
+  for cmd in stow fzf nvim tmux zsh tree git starship zoxide eza; do
+    if command -v "$cmd" &>/dev/null; then
+      ok "$cmd"
+    else
+      warn "$cmd not on PATH"
+      missing=$((missing+1))
+    fi
+  done
+  # yazi is optional (armv7l skip)
+  if command -v yazi &>/dev/null; then ok "yazi"; else warn "yazi not on PATH (expected on armv7l)"; fi
+  [[ $missing -eq 0 ]] || warn "$missing required tool(s) missing — check $LOGFILE"
+}
+
 # ── main ──────────────────────────────────────────────────────────────────────
 main() {
   echo ""
@@ -312,6 +376,7 @@ main() {
   install_tpm
   stow_dotfiles
   set_zsh_default
+  [[ $DRY_RUN -eq 0 ]] && verify
 
   echo ""
   ok "All done!"

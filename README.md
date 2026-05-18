@@ -22,12 +22,19 @@ Both run the same script — it auto-clones to `~/dotPi` when piped.
 ~/dotPi/setup.sh --dry-run
 ```
 
+**Other flags:**
+
+```bash
+~/dotPi/setup.sh --skip-shell   # don't run chsh
+~/dotPi/setup.sh --help         # print full usage
+```
+
 ## What the bootstrap does
 
 | Step | What | How |
 |---|---|---|
 | 1 | Preflight | refuses root, caches sudo, waits for apt lock, generates UTF-8 locale |
-| 2 | APT packages | `stow fzf neovim tmux zsh tree xclip curl wget git unzip gpg ca-certificates locales` |
+| 2 | APT packages | `stow fzf neovim tmux zsh tree xclip curl wget git unzip gpg ca-certificates locales bat fd-find btop` |
 | 3 | [starship](https://starship.rs) | official installer → `/usr/local/bin` |
 | 4 | [zoxide](https://github.com/ajeetdsouza/zoxide) | official installer → `/usr/local/bin` |
 | 5 | [eza](https://github.com/eza-community/eza) | `deb.gierens.de` apt repo (amd64 / arm64 / armhf) |
@@ -95,7 +102,10 @@ tmux                  # open tmux
 | `fcd` | Fuzzy cd |
 | `fv` | Fuzzy open in nvim |
 | `f` | Fuzzy find → copy path to clipboard |
-| `l` / `lt` | `eza -l` / `eza --tree` |
+| `l` / `lt` / `ll` | `eza -l` / `eza --tree` / `eza -l` (no hidden) |
+| `cat` | `bat --paging=never` (when available; auto-handles Debian's `batcat`) |
+| `top` | `btop` (when available) |
+| `fs` | `yazi` (when available) |
 
 ## Environment overrides
 
@@ -106,6 +116,7 @@ The one-liner installer respects these variables:
 | `DOTPI_REPO` | `https://github.com/opx0/dotPi` | fork URL |
 | `DOTPI_DIR` | `$HOME/dotPi` | clone target |
 | `DOTPI_BRANCH` | `main` | branch/tag to check out |
+| `GH_TOKEN` | _(unset)_ | optional GitHub token — passed to GitHub API calls (yazi release lookup) to avoid the 60/hr anonymous rate limit on shared IPs |
 
 Example:
 
