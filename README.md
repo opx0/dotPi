@@ -39,9 +39,12 @@ Both run the same script — it auto-clones to `~/dotPi` when piped.
 | 4 | [zoxide](https://github.com/ajeetdsouza/zoxide) | official installer → `/usr/local/bin` |
 | 5 | [eza](https://github.com/eza-community/eza) | `deb.gierens.de` apt repo (amd64 / arm64 / armhf) |
 | 6 | [yazi](https://github.com/sxyazi/yazi) | official `.deb` release (amd64 / arm64) |
-| 7 | [TPM](https://github.com/tmux-plugins/tpm) | `git clone` → `~/.config/tmux/plugins/tpm` |
-| 8 | Dotfiles | backs up conflicting files, then `stow --restow .` |
-| 9 | Default shell | `sudo chsh -s zsh` (bypasses PAM prompt) |
+| 7 | [tailscale](https://tailscale.com) | official `install.sh` → installs + enables `tailscaled`; `tailscale up` (login) is deferred |
+| 8 | [GitHub CLI](https://cli.github.com) | `cli.github.com` apt repo (amd64 / arm64) |
+| 9 | [TPM](https://github.com/tmux-plugins/tpm) | `git clone` → `~/.config/tmux/plugins/tpm` |
+| 10 | Dotfiles | backs up conflicting files, then `stow --restow .` |
+| 11 | Default shell | `sudo chsh -s zsh` (bypasses PAM prompt) |
+| 12 | GitHub auth | git identity (`GIT_USER_NAME`/`GIT_USER_EMAIL` or prompt) + `gh auth login` (or `GH_TOKEN`) + `gh auth setup-git` — optional/deferred |
 
 Everything is **idempotent**: re-running only does work that's not already done.
 
@@ -58,11 +61,11 @@ Everything is **idempotent**: re-running only does work that's not already done.
 
 ## Architecture support
 
-| Arch | apt pkgs | starship | zoxide | eza | yazi |
-|---|---|---|---|---|---|
-| `x86_64` (VPS) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `aarch64` (Pi 4/5, Pi Zero 2, 64-bit VPS) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `armv7l` (Pi 3 / 32-bit Pi OS) | ✓ | ✓ | ✓ | ✓ | ✗ (no upstream binary) |
+| Arch | apt pkgs | starship | zoxide | eza | yazi | tailscale |
+|---|---|---|---|---|---|---|
+| `x86_64` (VPS) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `aarch64` (Pi 4/5, Pi Zero 2, 64-bit VPS) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `armv7l` (Pi 3 / 32-bit Pi OS) | ✓ | ✓ | ✓ | ✓ | ✗ (no upstream binary) | ✓ |
 
 ## What's included
 
@@ -76,6 +79,8 @@ Everything is **idempotent**: re-running only does work that's not already done.
 
 ```bash
 exec zsh              # reload shell
+sudo tailscale up     # log in to Tailscale (prints an auth URL to open)
+gh auth login         # finish GitHub login if the bootstrap deferred it (non-interactive run)
 tmux                  # open tmux
 # then press C-Space + I  to install tmux plugins
 ```
@@ -116,7 +121,9 @@ The one-liner installer respects these variables:
 | `DOTPI_REPO` | `https://github.com/opx0/dotPi` | fork URL |
 | `DOTPI_DIR` | `$HOME/dotPi` | clone target |
 | `DOTPI_BRANCH` | `main` | branch/tag to check out |
-| `GH_TOKEN` | _(unset)_ | optional GitHub token — passed to GitHub API calls (yazi release lookup) to avoid the 60/hr anonymous rate limit on shared IPs |
+| `GH_TOKEN` / `GITHUB_TOKEN` | _(unset)_ | GitHub token. Used for GitHub API calls (yazi release lookup, dodges the 60/hr anon limit on shared IPs) **and** for non-interactive `gh auth login` on fresh machines |
+| `GIT_USER_NAME` | _(unset)_ | git `user.name` to set; prompts when interactive if unset |
+| `GIT_USER_EMAIL` | _(unset)_ | git `user.email` to set; prompts when interactive if unset |
 
 Example:
 

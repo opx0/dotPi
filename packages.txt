@@ -1,5 +1,5 @@
 # apt packages installed by setup.sh
-# eza/yazi/zoxide/starship are handled separately (binary / apt-repo)
+# eza/yazi/zoxide/starship/tailscale/gh are handled separately (binary / apt-repo)
 stow
 fzf
 neovim

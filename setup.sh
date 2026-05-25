@@ -61,7 +61,10 @@ Env overrides honored when piped via curl|bash:
   DOTPI_REPO     fork URL                (default: https://github.com/opx0/dotPi)
   DOTPI_DIR      clone target            (default: \$HOME/dotPi)
   DOTPI_BRANCH   branch/tag to check out (default: main)
-  GH_TOKEN       used for GitHub API calls to avoid rate-limiting
+  GH_TOKEN       GitHub token — API calls + non-interactive 'gh auth login'
+  GITHUB_TOKEN   alias for GH_TOKEN (either is accepted by gh)
+  GIT_USER_NAME  git user.name to set    (else prompt when interactive)
+  GIT_USER_EMAIL git user.email to set   (else prompt when interactive)
 EOF
 }
 
@@ -274,6 +277,53 @@ install_yazi_zip() {
   ok "yazi (zip)"
 }
 
+# ── tailscale ───────────────────────────────────────────────────────────────
+install_tailscale() {
+  log "Installing tailscale..."
+  if command -v tailscale &>/dev/null; then
+    ok "tailscale $(tailscale version | head -1)"
+  else
+    # official installer auto-detects distro + arch and enables the daemon
+    run "curl -fsSL https://tailscale.com/install.sh | sh"
+    ok "tailscale"
+  fi
+
+  # ensure tailscaled is enabled + running (idempotent — the installer already
+  # does this on systemd, but a re-run repairs a disabled/stopped daemon)
+  if command -v systemctl &>/dev/null; then
+    run "sudo systemctl enable --now tailscaled"
+  fi
+
+  # auth is interactive and intentionally deferred — point at the finishing step
+  if [[ $DRY_RUN -eq 0 ]] && command -v tailscale &>/dev/null && ! tailscale status &>/dev/null; then
+    warn "tailscale installed but not logged in — finish with:  sudo tailscale up"
+  fi
+}
+
+# ── GitHub CLI (gh, via official apt repo) ────────────────────────────────────
+install_gh() {
+  log "Installing GitHub CLI (gh)..."
+  if command -v gh &>/dev/null; then ok "gh $(gh --version | head -1)"; return; fi
+
+  if [[ ! -f /etc/apt/sources.list.d/github-cli.list ]]; then
+    local deb_arch; deb_arch="$(dpkg --print-architecture)"
+    run "sudo mkdir -p /etc/apt/keyrings"
+    # this keyring is already dearmored (binary gpg) — write it as-is, no --dearmor
+    run "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null"
+    run "sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg"
+    run "echo 'deb [arch=$deb_arch signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null"
+    run "sudo apt-get update -y -qq"
+  fi
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo -e "${DIM}    [dry] sudo apt-get install -y -qq gh${NC}"
+  elif sudo apt-get install -y -qq gh; then
+    ok "gh"
+  else
+    warn "gh: no package for $ARCH? install manually — https://github.com/cli/cli#installation"
+  fi
+}
+
 # ── TPM ───────────────────────────────────────────────────────────────────────
 install_tpm() {
   log "Installing TPM..."
@@ -341,11 +391,75 @@ set_zsh_default() {
   fi
 }
 
+# ── GitHub: git identity + gh auth ────────────────────────────────────────────
+configure_git_identity() {
+  local cur_name cur_email
+  cur_name="$(git config --global user.name 2>/dev/null || true)"
+  cur_email="$(git config --global user.email 2>/dev/null || true)"
+  if [[ -n "$cur_name" && -n "$cur_email" ]]; then
+    ok "git identity already set ($cur_name <$cur_email>)"
+    return
+  fi
+
+  # env wins; otherwise prompt, but only with a real TTY (skips piped curl|bash)
+  local name="${GIT_USER_NAME:-$cur_name}"
+  local email="${GIT_USER_EMAIL:-$cur_email}"
+  if [[ $DRY_RUN -eq 0 && -t 0 && -t 1 ]]; then
+    [[ -z "$name"  ]] && { read -rp "  git user.name  (blank to skip): " name  || true; }
+    [[ -z "$email" ]] && { read -rp "  git user.email (blank to skip): " email || true; }
+  fi
+
+  [[ -n "$name"  ]] && { run "git config --global user.name '$name'";   ok "user.name = $name"; }
+  [[ -n "$email" ]] && { run "git config --global user.email '$email'"; ok "user.email = $email"; }
+  [[ -z "$name" && -z "$email" ]] && warn "git identity unset — set later or pass GIT_USER_NAME / GIT_USER_EMAIL"
+}
+
+setup_github() {
+  log "Configuring GitHub..."
+  configure_git_identity
+
+  if ! command -v gh &>/dev/null; then
+    warn "gh not installed — skipping GitHub auth"
+    return
+  fi
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo -e "${DIM}    [dry] gh auth login  (token if \$GH_TOKEN/\$GITHUB_TOKEN set, else interactive)${NC}"
+    echo -e "${DIM}    [dry] gh auth setup-git${NC}"
+    return
+  fi
+
+  if gh auth status &>/dev/null; then
+    ok "gh already authenticated"
+  else
+    # token never goes through run/eval (the whole run is tee'd to the logfile)
+    local token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+    if [[ -n "$token" ]]; then
+      if printf '%s' "$token" | gh auth login --with-token; then
+        ok "gh authenticated (token)"
+      else
+        warn "token auth failed — finish later:  gh auth login"; return
+      fi
+    elif [[ -t 0 && -t 1 ]]; then
+      log "Launching 'gh auth login' (pick SSH to match this repo's git@ remotes)..."
+      if ! gh auth login; then
+        warn "gh auth login cancelled — finish later:  gh auth login"; return
+      fi
+    else
+      warn "no TTY and no \$GH_TOKEN/\$GITHUB_TOKEN — GitHub login deferred. Finish with:  gh auth login"
+      return
+    fi
+  fi
+
+  # wire git to use gh's credentials (HTTPS helper; harmless for SSH remotes)
+  if gh auth setup-git; then ok "git wired to GitHub (gh auth setup-git)"; else warn "gh auth setup-git failed"; fi
+}
+
 # ── verify ────────────────────────────────────────────────────────────────────
 verify() {
   log "Verifying installed tools..."
   local missing=0
-  for cmd in stow fzf nvim tmux zsh tree git starship zoxide eza; do
+  for cmd in stow fzf nvim tmux zsh tree git starship zoxide eza tailscale gh; do
     if command -v "$cmd" &>/dev/null; then
       ok "$cmd"
     else
@@ -373,9 +487,12 @@ main() {
   install_zoxide
   install_eza
   install_yazi
+  install_tailscale
+  install_gh
   install_tpm
   stow_dotfiles
   set_zsh_default
+  setup_github
   [[ $DRY_RUN -eq 0 ]] && verify
 
   echo ""
